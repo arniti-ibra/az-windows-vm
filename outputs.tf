@@ -3,10 +3,15 @@ output "resource_group_name" {
 }
 
 output "public_ip_address" {
-  value = azurerm_linux_virtual_machine.my_tf_vm.public_ip_address
+  value = azurerm_windows_virtual_machine.my_tf_vm.public_ip_address
 }
 
-output "tls_private_key" {
-  value     = tls_private_key.ssh.private_key_pem
+output "win_username" {
+  value     = azurerm_windows_virtual_machine.my_tf_vm.admin_username
+  sensitive = false
+}
+
+output "win_password" {
+  value     = azurerm_windows_virtual_machine.my_tf_vm.admin_password
   sensitive = true
 }

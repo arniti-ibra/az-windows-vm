@@ -5,7 +5,14 @@ resource "random_pet" "rg_name" {
 resource "azurerm_resource_group" "rg" {
   location = var.resource_group_location
   name     = random_pet.rg_name.id
+  
+  
+  tags = { 
+    purpose = "vm"
+    source = "terraform"
+  }
 }
+
 
 # Create virtual network
 resource "azurerm_virtual_network" "my_tf_network" {
@@ -89,19 +96,15 @@ resource "azurerm_storage_account" "my_storage_account" {
   account_replication_type = "LRS"
 }
 
-# Create (and display) an SSH key
-resource "tls_private_key" "ssh" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
 # Create virtual machine
-resource "azurerm_linux_virtual_machine" "my_tf_vm" {
-  name                  = "linuxvm"
+resource "azurerm_windows_virtual_machine" "my_tf_vm" {
+  name                  = "windowsvm"
   location              = azurerm_resource_group.rg.location
   resource_group_name   = azurerm_resource_group.rg.name
   network_interface_ids = [azurerm_network_interface.my_tf_nic.id]
   size                  = "Standard_DS1_v2"
+  admin_username        = "kosovan4life"
+  admin_password        = "Kosovan4life!"
 
   os_disk {
     name                 = "myOsDisk"
@@ -110,19 +113,10 @@ resource "azurerm_linux_virtual_machine" "my_tf_vm" {
   }
 
   source_image_reference {
-    publisher = "Canonical"
-    offer     = "UbuntuServer"
-    sku       = "18.04-LTS"
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2012-R2-Datacenter"
     version   = "latest"
-  }
-
-  computer_name                   = "linuxvm"
-  admin_username                  = "azureuser"
-  disable_password_authentication = true
-
-  admin_ssh_key {
-    username   = "azureuser"
-    public_key = tls_private_key.ssh.public_key_openssh
   }
 
   boot_diagnostics {
@@ -130,11 +124,11 @@ resource "azurerm_linux_virtual_machine" "my_tf_vm" {
   }
 }
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "vm_shutdown_schedule" {
-  virtual_machine_id = azurerm_linux_virtual_machine.my_tf_vm.id
+  virtual_machine_id = azurerm_windows_virtual_machine.my_tf_vm.id
   location           = azurerm_resource_group.rg.location
   enabled            = true
 
-  daily_recurrence_time = "1700"
+  daily_recurrence_time = "1800"
   timezone              = "Greenwich Standard Time"
 
 

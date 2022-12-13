@@ -128,7 +128,7 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "vm_shutdown_schedule" {
   location           = azurerm_resource_group.rg.location
   enabled            = true
 
-  daily_recurrence_time = "1800"
+  daily_recurrence_time = "1700"
   timezone              = "Greenwich Standard Time"
 
 

@@ -1,131 +1,122 @@
-resource "random_pet" "rg_name" {
-  prefix = var.resource_group_name_prefix
+locals {
+  target_resource_group  = format("%s-%s-%s-%03d", var.resource_group_prefix, var.purpose, var.environment_name, var.instance_id)
+  target_storage_account = format("%s%s%s%03d", var.storage_account_prefix, var.purpose, var.environment_name, var.instance_id)
+}
+resource "azurerm_resource_group" "vm_rg" {
+  name     = local.target_resource_group
+  location = "West Europe"
 }
 
-resource "azurerm_resource_group" "rg" {
-  location = var.resource_group_location
-  name     = random_pet.rg_name.id
-  
-  
-  tags = { 
-    purpose = "vm"
-    source = "terraform"
+resource "azurerm_virtual_network" "v_net" {
+  name                = format("%s-network", var.purpose)
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.vm_rg.location
+  resource_group_name = azurerm_resource_group.vm_rg.name
+
+  tags = {
+    purpose = var.purpose
   }
 }
 
-
-# Create virtual network
-resource "azurerm_virtual_network" "my_tf_network" {
-  name                = "myVnet"
-  address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "azurerm_subnet" "internal" {
+  name                 = "internal"
+  resource_group_name  = azurerm_resource_group.vm_rg.name
+  virtual_network_name = azurerm_virtual_network.v_net.name
+  address_prefixes     = ["10.0.2.0/24"]
 }
 
-# Create subnet
-resource "azurerm_subnet" "my_tf_subnet" {
-  name                 = "mySubnet"
-  resource_group_name  = azurerm_resource_group.rg.name
-  virtual_network_name = azurerm_virtual_network.my_tf_network.name
-  address_prefixes     = ["10.0.1.0/24"]
-}
-
-# Create public IPs
-resource "azurerm_public_ip" "my_tf_public_ip" {
-  name                = "myPublicIP"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "azurerm_public_ip" "public_ip" {
+  name                = "PublicIp1"
+  resource_group_name = azurerm_resource_group.vm_rg.name
+  location            = azurerm_resource_group.vm_rg.location
   allocation_method   = "Dynamic"
 }
 
-# Create Network Security Group and rule
-resource "azurerm_network_security_group" "my_tf_nsg" {
-  name                = "myNetworkSecurityGroup"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
-
-  security_rule {
-    name                       = "SSH"
-    priority                   = 1001
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "22"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
+resource "azurerm_network_security_group" "nsg" {
+  name                = "NetworkSecurityGroup1"
+  location            = azurerm_resource_group.vm_rg.location
+  resource_group_name = azurerm_resource_group.vm_rg.name
 }
 
-# Create network interface
-resource "azurerm_network_interface" "my_tf_nic" {
-  name                = "myNIC"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+resource "azurerm_network_security_rule" "network_security_rule" {
+  name                        = "allow3389"
+  priority                    = 100
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  destination_port_range      = "3389"
+  source_address_prefix       = "*"
+  destination_address_prefix  = "VirtualNetwork"
+  resource_group_name         = azurerm_resource_group.vm_rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
+resource "azurerm_network_interface" "main" {
+  name                = format("%s-nic", var.purpose) #"tfvm-nic"
+  location            = azurerm_resource_group.vm_rg.location
+  resource_group_name = azurerm_resource_group.vm_rg.name
 
   ip_configuration {
-    name                          = "my_nic_configuration"
-    subnet_id                     = azurerm_subnet.my_tf_subnet.id
+    name                          = "testconfiguration1"
+    subnet_id                     = azurerm_subnet.internal.id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = azurerm_public_ip.my_tf_public_ip.id
+    public_ip_address_id          = azurerm_public_ip.public_ip.id
   }
 }
 
 # Connect the security group to the network interface
-resource "azurerm_network_interface_security_group_association" "nic_nsg_connection" {
-  network_interface_id      = azurerm_network_interface.my_tf_nic.id
-  network_security_group_id = azurerm_network_security_group.my_tf_nsg.id
-}
-
-# Generate random text for a unique storage account name
-resource "random_id" "random_id" {
-  keepers = {
-    # Generate a new ID only when a new resource group is defined
-    resource_group = azurerm_resource_group.rg.name
-  }
-
-  byte_length = 8
+resource "azurerm_network_interface_security_group_association" "example" {
+  network_interface_id      = azurerm_network_interface.main.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
 # Create storage account for boot diagnostics
 resource "azurerm_storage_account" "my_storage_account" {
-  name                     = "diag${random_id.random_id.hex}"
-  location                 = azurerm_resource_group.rg.location
-  resource_group_name      = azurerm_resource_group.rg.name
+  name                     = local.target_storage_account
+  location                 = azurerm_resource_group.vm_rg.location
+  resource_group_name      = azurerm_resource_group.vm_rg.name
   account_tier             = "Standard"
   account_replication_type = "LRS"
 }
 
-# Create virtual machine
-resource "azurerm_windows_virtual_machine" "my_tf_vm" {
-  name                  = "windowsvm"
-  location              = azurerm_resource_group.rg.location
-  resource_group_name   = azurerm_resource_group.rg.name
-  network_interface_ids = [azurerm_network_interface.my_tf_nic.id]
-  size                  = "Standard_DS1_v2"
-  admin_username        = "kosovan4life"
-  admin_password        = "Kosovan4life!"
+resource "azurerm_windows_virtual_machine" "az_lin_vm" {
+  name                  = format("%s-%s-%s-%s", var.cloud_service_provider, var.operating_system, var.purpose, var.environment_name) #"az-tfvm-sbx"
+  location              = azurerm_resource_group.vm_rg.location
+  resource_group_name   = azurerm_resource_group.vm_rg.name
+  network_interface_ids = [azurerm_network_interface.main.id]
+  size                  = "Standard_A2_v2"
+  admin_username        = "projectmbappe"
+  admin_password        = "ProjectMbappe1!"
+
+  # Uncomment this line to delete the OS disk automatically when deleting the VM
+  # delete_os_disk_on_termination = true
+
+  # Uncomment this line to delete the data disks automatically when deleting the VM
+  # delete_data_disks_on_termination = true
 
   os_disk {
-    name                 = "myOsDisk"
     caching              = "ReadWrite"
-    storage_account_type = "Premium_LRS"
+    storage_account_type = "Standard_LRS"
   }
 
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
-    sku       = "2012-R2-Datacenter"
+    sku       = "2022-Datacenter"
     version   = "latest"
   }
-
   boot_diagnostics {
     storage_account_uri = azurerm_storage_account.my_storage_account.primary_blob_endpoint
   }
+
+  tags = {
+    os = "windows"
+  }
 }
+
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "vm_shutdown_schedule" {
-  virtual_machine_id = azurerm_windows_virtual_machine.my_tf_vm.id
-  location           = azurerm_resource_group.rg.location
+  virtual_machine_id = azurerm_windows_virtual_machine.az_lin_vm.id
+  location           = azurerm_resource_group.vm_rg.location
   enabled            = true
 
   daily_recurrence_time = "1700"
@@ -136,5 +127,4 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "vm_shutdown_schedule" {
     enabled = false
 
   }
-
 }

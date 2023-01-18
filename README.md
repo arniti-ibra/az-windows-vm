@@ -7,7 +7,7 @@
 > 1. virtual network
 > 1. subnet
 > 1. a public IP
-> 1. a Network Security Group (NSG) and rule (optional shown in this demo)
+> 1. a Network Security Group (NSG) and rule with association.
 > 1. a network interface for ip configuration
 > 1. a connection between NSG and the network interface
 > 1. a storage account
